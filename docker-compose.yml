@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # Account 1 - Production domain
+  cloudflare-monitor-prod:
+    build: .
+    container_name: cf-failover-prod
+    restart: unless-stopped
+    environment:
+      - CF_API_TOKEN=${PROD_CF_API_TOKEN}
+      - CF_ZONE_ID=${PROD_CF_ZONE_ID}
+      - DOMAIN=${PROD_DOMAIN}
+      - PRIMARY_IP=${PROD_PRIMARY_IP}
+      - BACKUP_IP=${PROD_BACKUP_IP}
+      - RECORD_TYPE=A
+      - TTL=120
+      - LOG_FILE=/app/data/intelligent_failover.log
+      - STATE_FILE=/app/data/failover_state.json
+    volumes:
+      - cf-prod-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "intelligent_failover.py", "check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Account 2 - Staging domain
+  cloudflare-monitor-staging:
+    build: .
+    container_name: cf-failover-staging
+    restart: unless-stopped
+    environment:
+      - CF_API_TOKEN=${STAGING_CF_API_TOKEN}
+      - CF_ZONE_ID=${STAGING_CF_ZONE_ID}
+      - DOMAIN=${STAGING_DOMAIN}
+      - PRIMARY_IP=${STAGING_PRIMARY_IP}
+      - BACKUP_IP=${STAGING_BACKUP_IP}
+      - RECORD_TYPE=A
+      - TTL=60
+      - LOG_FILE=/app/data/intelligent_failover.log
+      - STATE_FILE=/app/data/failover_state.json
+    volumes:
+      - cf-staging-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "intelligent_failover.py", "check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Account 3 - Development domain
+  cloudflare-monitor-dev:
+    build: .
+    container_name: cf-failover-dev
+    restart: unless-stopped
+    environment:
+      - CF_API_TOKEN=${DEV_CF_API_TOKEN}
+      - CF_ZONE_ID=${DEV_CF_ZONE_ID}
+      - DOMAIN=${DEV_DOMAIN}
+      - PRIMARY_IP=${DEV_PRIMARY_IP}
+      - BACKUP_IP=${DEV_BACKUP_IP}
+      - RECORD_TYPE=A
+      - TTL=30
+      - LOG_FILE=/app/data/intelligent_failover.log
+      - STATE_FILE=/app/data/failover_state.json
+    volumes:
+      - cf-dev-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "intelligent_failover.py", "check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  cf-prod-data:
+    driver: local
+  cf-staging-data:
+    driver: local
+  cf-dev-data:
+    driver: local

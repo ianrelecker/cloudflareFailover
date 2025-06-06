@@ -29,9 +29,9 @@ class MonitorState:
     health_history: List[HealthCheck]
 
 class IntelligentCloudflareFailover:
-    def __init__(self, config_file="config.json", state_file="failover_state.json"):
+    def __init__(self, config_file="config.json", state_file=None):
         self.config_file = config_file
-        self.state_file = state_file
+        self.state_file = state_file or os.getenv("STATE_FILE", "failover_state.json")
         self.config = self.load_config()
         self.state = self.load_state()
         self.setup_logging()
@@ -76,11 +76,15 @@ class IntelligentCloudflareFailover:
             "log_file": os.getenv("LOG_FILE", "/var/log/intelligent_failover.log")
         }
         
-        # Override with file config if exists
+        # Override with file config if exists (optional for Docker)
         if os.path.exists(self.config_file):
-            with open(self.config_file, 'r') as f:
-                file_config = json.load(f)
-                config.update({k: v for k, v in file_config.items() if v is not None})
+            try:
+                with open(self.config_file, 'r') as f:
+                    file_config = json.load(f)
+                    config.update({k: v for k, v in file_config.items() if v is not None})
+            except Exception as e:
+                # In Docker, we might not have a config file - that's OK
+                pass
         
         # Validate required fields
         required = ["cf_api_token", "cf_zone_id", "domain", "primary_ip", "backup_ip"]

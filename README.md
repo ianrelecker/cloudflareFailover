@@ -6,9 +6,10 @@ Simple CLI tool for automated DNS failover using Cloudflare's API with intellige
 
 - **Smart failover rules**: Ping every 30s, failover after 2 consecutive failures or >100ms latency
 - **Stability requirements**: Primary must be healthy for 10 minutes before restoration  
-- **Single account focus**: Simple configuration for one Cloudflare account
+- **Multi-account support**: Run multiple containers for different Cloudflare accounts
 - **State persistence**: Remembers failover history and consecutive health checks
-- **CLI-based**: Lightweight monitoring without web interface complexity
+- **Docker-ready**: Full containerization with persistent volumes and health checks
+- **Environment-first config**: Use environment variables or config files
 
 ## Health Monitoring Rules
 
@@ -122,7 +123,59 @@ export BACKUP_IP="5.6.7.8"
 
 ## Deployment Options
 
-### Systemd Service
+### Docker (Recommended)
+
+#### Single Account
+
+```bash
+# Copy and edit environment variables
+cp .env.example .env
+# Edit .env with your Cloudflare credentials
+
+# Build and run
+docker build -t cloudflare-failover .
+docker run -d \
+  --name cf-failover \
+  --restart unless-stopped \
+  --env-file .env \
+  -v cf-data:/app/data \
+  cloudflare-failover
+```
+
+#### Multiple Accounts
+
+```bash
+# Copy and edit environment file
+cp .env.example .env
+# Add credentials for PROD_, STAGING_, DEV_ prefixed variables
+
+# Run with docker-compose
+docker-compose up -d
+
+# Check logs for all services
+docker-compose logs -f
+
+# Check individual service
+docker-compose logs -f cloudflare-monitor-prod
+```
+
+#### Docker Environment Variables
+
+Each container needs these environment variables:
+
+```bash
+CF_API_TOKEN=your_cloudflare_api_token
+CF_ZONE_ID=your_zone_id
+DOMAIN=example.com
+PRIMARY_IP=1.2.3.4
+BACKUP_IP=5.6.7.8
+RECORD_TYPE=A        # Optional, defaults to A
+TTL=120             # Optional, defaults to 120
+```
+
+### Native Installation
+
+#### Systemd Service
 
 Create `/etc/systemd/system/cloudflare-failover.service`:
 
@@ -150,21 +203,7 @@ sudo systemctl enable cloudflare-failover
 sudo systemctl start cloudflare-failover
 ```
 
-### Docker Container
-
-```bash
-# Build and run with docker-compose
-cd examples/docker
-cp ../../config.json.example config.json
-# Edit config.json with your credentials
-
-docker-compose up -d
-
-# Check logs
-docker-compose logs -f
-```
-
-### Cron Job (Simple Checks)
+#### Cron Job (Simple Checks)
 
 For basic monitoring without the continuous monitor:
 
@@ -183,6 +222,14 @@ The system maintains state in `failover_state.json`:
 - **Current status**: Tracks whether currently failed over
 
 This state persists across restarts, so the system remembers its history and doesn't reset stability counters.
+
+### Docker Persistence
+
+In Docker deployments, state is stored in persistent volumes:
+- **Single account**: Volume `cf-data:/app/data`
+- **Multi-account**: Separate volumes per service (`cf-prod-data`, `cf-staging-data`, etc.)
+
+State files are preserved across container restarts and updates.
 
 ## Monitoring and Alerts
 
@@ -206,6 +253,26 @@ The CLI design makes it easy to integrate with existing monitoring:
 - **Grafana**: Create dashboards from log files or status API
 - **PagerDuty**: Alert on failover events from logs
 
+### Docker Monitoring
+
+For containerized deployments:
+
+```bash
+# Check container health
+docker ps
+docker inspect <container-name> | grep Health
+
+# View logs
+docker logs -f cloudflare-monitor-prod
+
+# Get status from running container
+docker exec cloudflare-monitor-prod python intelligent_failover.py status
+
+# Monitor with docker-compose
+docker-compose ps
+docker-compose logs -f
+```
+
 ## Best Practices
 
 1. **API Security**: Use scoped API tokens with minimal `Zone:DNS:Edit` permissions
@@ -214,6 +281,9 @@ The CLI design makes it easy to integrate with existing monitoring:
 4. **Testing**: Test manual failover/restore before relying on automation
 5. **Backup monitoring**: Monitor the backup server health separately
 6. **State backup**: Include `failover_state.json` in system backups
+7. **Container resources**: Set appropriate memory/CPU limits for Docker deployments
+8. **Volume backups**: Backup Docker volumes containing state data regularly
+9. **Environment security**: Use Docker secrets or external secret management for sensitive data
 
 ## Troubleshooting
 
