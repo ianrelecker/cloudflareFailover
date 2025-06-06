@@ -1,0 +1,20 @@
+# Crontab entries for Cloudflare DNS Failover
+# Run 'crontab -e' to edit your crontab and add these entries
+
+# Check every minute (aggressive monitoring)
+* * * * * /usr/local/bin/cloudflare_failover.py check >> /var/log/dns_failover.log 2>&1
+
+# Check every 2 minutes (recommended for most use cases)
+*/2 * * * * /usr/local/bin/cloudflare_failover.sh check
+
+# Check every 5 minutes (conservative monitoring)
+*/5 * * * * /usr/local/bin/cloudflare_failover.py check
+
+# Daily log rotation at midnight
+0 0 * * * /usr/bin/logrotate /etc/logrotate.d/cloudflare-failover
+
+# Weekly status report (requires mail command)
+0 9 * * 1 /usr/local/bin/cloudflare_failover.py status | mail -s "Weekly DNS Failover Status" admin@example.com
+
+# Alternative: Using systemd-run for better isolation
+*/5 * * * * /bin/systemd-run --uid=nobody --gid=nogroup /usr/local/bin/cloudflare_failover.py check

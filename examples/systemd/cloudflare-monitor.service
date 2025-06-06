@@ -1,0 +1,32 @@
+[Unit]
+Description=Cloudflare DNS Failover Monitor
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/cloudflare_failover.py check
+User=nobody
+Group=nogroup
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+RestrictRealtime=true
+
+# Allow writing to log file
+ReadWritePaths=/var/log
+
+# Environment file for configuration
+EnvironmentFile=-/etc/cloudflare-failover/config.env
+
+[Install]
+WantedBy=multi-user.target

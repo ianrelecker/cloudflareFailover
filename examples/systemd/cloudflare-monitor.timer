@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Cloudflare DNS Monitor every 5 minutes
+Requires=cloudflare-monitor.service
+
+[Timer]
+OnCalendar=*:0/5
+Persistent=true
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
