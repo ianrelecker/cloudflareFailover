@@ -33,18 +33,24 @@ Simple CLI tool for automated DNS failover using Cloudflare's API with intellige
 
 ### 2. Configure
 
+**Option A: Azure Key Vault (Recommended)**
 ```bash
-# Copy configuration template
-cp config.json.example config.json
+# Store secrets in Azure Key Vault
+az keyvault secret set --vault-name "your-vault" --name "cloudflare-api-token" --value "your_token"
+az keyvault secret set --vault-name "your-vault" --name "cloudflare-zone-id" --value "your_zone_id"
 
-# Edit with your credentials
-{
-  "cf_api_token": "your_api_token_here",
-  "cf_zone_id": "your_zone_id_here", 
-  "domain": "example.com",
-  "primary_ip": "1.2.3.4",
-  "backup_ip": "5.6.7.8"
-}
+# Set Key Vault URL
+export AZURE_KEY_VAULT_URL="https://your-vault.vault.azure.net/"
+
+# Note: Domain and IPs are hardcoded in the script - edit intelligent_failover.py
+```
+
+**Option B: Environment Variables Only**
+```bash
+export CF_API_TOKEN="your_token"
+export CF_ZONE_ID="your_zone_id"
+
+# Note: Domain and IPs are hardcoded in the script - edit intelligent_failover.py
 ```
 
 ### 3. Install and Run
@@ -52,6 +58,12 @@ cp config.json.example config.json
 ```bash
 # Install dependencies
 pip install -r requirements.txt
+
+# Edit the script to set your domain and IPs
+# Update lines 127-129 in intelligent_failover.py:
+#   "domain": "your-actual-domain.com"
+#   "primary_ip": "your-primary-ip"
+#   "backup_ip": "your-backup-ip"
 
 # Test configuration
 ./intelligent_failover.py status
@@ -95,30 +107,101 @@ Commands:
 
 ## Configuration
 
-### JSON Configuration (`config.json`)
+### Configuration
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `cf_api_token` | Cloudflare API token | Required |
-| `cf_zone_id` | Cloudflare zone ID | Required |
-| `domain` | Domain to manage | Required |
-| `primary_ip` | Primary server IP | Required |
-| `backup_ip` | Backup server IP | Required |
-| `record_type` | DNS record type | "A" |
-| `ttl` | DNS TTL in seconds | 120 |
-| `log_file` | Log file path | "/var/log/intelligent_failover.log" |
+| Parameter | Description | Source | Default |
+|-----------|-------------|--------|----------|
+| `cf_api_token` | Cloudflare API token | Azure KV or ENV | Required |
+| `cf_zone_id` | Cloudflare zone ID | Azure KV or ENV | Required |
+| `domain` | Domain to manage | **Hardcoded in script** | "example.com" |
+| `primary_ip` | Primary server IP | **Hardcoded in script** | "1.2.3.4" |
+| `backup_ip` | Backup server IP | **Hardcoded in script** | "5.6.7.8" |
+| `record_type` | DNS record type | ENV | "A" |
+| `ttl` | DNS TTL in seconds | ENV | 120 |
+| `log_file` | Log file path | ENV | "/var/log/intelligent_failover.log" |
 
 ### Environment Variables
 
-You can also use environment variables instead of JSON:
+For sensitive credentials only (domain and IPs are hardcoded):
 
 ```bash
 export CF_API_TOKEN="your_token"
 export CF_ZONE_ID="your_zone_id"
-export DOMAIN="example.com"
-export PRIMARY_IP="1.2.3.4"
-export BACKUP_IP="5.6.7.8"
+
+# Optional settings
+export RECORD_TYPE="A"
+export TTL="120"
+export LOG_FILE="/var/log/intelligent_failover.log"
 ```
+
+### Azure Key Vault Integration
+
+For enhanced security, store sensitive credentials in Azure Key Vault:
+
+#### 1. Azure Key Vault Setup
+
+```bash
+# Create Key Vault (if needed)
+az keyvault create --name "your-keyvault-name" --resource-group "your-rg" --location "eastus"
+
+# Store secrets
+az keyvault secret set --vault-name "your-keyvault-name" --name "cloudflare-api-token" --value "your_actual_token"
+az keyvault secret set --vault-name "your-keyvault-name" --name "cloudflare-zone-id" --value "your_actual_zone_id"
+```
+
+#### 2. Authentication Methods
+
+**Option A: Managed Identity (Recommended for Azure VMs)**
+```bash
+export AZURE_KEY_VAULT_URL="https://your-keyvault-name.vault.azure.net/"
+# No additional auth needed - uses system assigned identity
+```
+
+**Option B: Service Principal**
+```bash
+export AZURE_KEY_VAULT_URL="https://your-keyvault-name.vault.azure.net/"
+export AZURE_TENANT_ID="your-tenant-id"
+export AZURE_CLIENT_ID="your-client-id"
+export AZURE_CLIENT_SECRET="your-client-secret"
+```
+
+**Option C: Azure CLI (Development)**
+```bash
+az login
+export AZURE_KEY_VAULT_URL="https://your-keyvault-name.vault.azure.net/"
+# Uses Azure CLI credentials
+```
+
+#### 3. Custom Secret Names
+
+Override default Key Vault secret names:
+
+```bash
+export KV_CF_API_TOKEN_NAME="my-custom-token-name"
+export KV_CF_ZONE_ID_NAME="my-custom-zone-id-name"
+```
+
+#### 4. Complete Environment Configuration
+
+```bash
+# Azure Key Vault settings
+export AZURE_KEY_VAULT_URL="https://your-keyvault-name.vault.azure.net/"
+export AZURE_TENANT_ID="your-tenant-id"
+export AZURE_CLIENT_ID="your-client-id"
+export AZURE_CLIENT_SECRET="your-client-secret"
+
+# Custom Key Vault secret names (optional)
+export KV_CF_API_TOKEN_NAME="cloudflare-api-token"
+export KV_CF_ZONE_ID_NAME="cloudflare-zone-id"
+
+# Domain and IPs are hardcoded in the script
+# Edit intelligent_failover.py lines 127-129 to set your values
+```
+
+**Configuration Sources:**
+1. **Azure Key Vault secrets** (CF API token and zone ID only)
+2. **Environment variables** (CF API token and zone ID fallback)
+3. **Hardcoded in script** (domain, primary_ip, backup_ip)
 
 ## Deployment Options
 
@@ -155,9 +238,16 @@ sudo systemctl start cloudflare-failover
 ```bash
 # Build and run with docker-compose
 cd examples/docker
-cp ../../config.json.example config.json
-# Edit config.json with your credentials
 
+# Make sure to edit intelligent_failover.py with your domain and IPs first!
+
+# Option A: Using Azure Key Vault
+export AZURE_KEY_VAULT_URL="https://your-vault.vault.azure.net/"
+docker-compose up -d
+
+# Option B: Using environment variables only
+export CF_API_TOKEN="your_token"
+export CF_ZONE_ID="your_zone_id"
 docker-compose up -d
 
 # Check logs
@@ -208,12 +298,13 @@ The CLI design makes it easy to integrate with existing monitoring:
 
 ## Best Practices
 
-1. **API Security**: Use scoped API tokens with minimal `Zone:DNS:Edit` permissions
-2. **Low TTL**: Keep TTL at 120 seconds for fast DNS propagation
-3. **Monitoring**: Watch logs for frequent flapping between servers
-4. **Testing**: Test manual failover/restore before relying on automation
-5. **Backup monitoring**: Monitor the backup server health separately
-6. **State backup**: Include `failover_state.json` in system backups
+1. **Secret Management**: Use Azure Key Vault for production deployments
+2. **API Security**: Use scoped API tokens with minimal `Zone:DNS:Edit` permissions
+3. **Low TTL**: Keep TTL at 120 seconds for fast DNS propagation
+4. **Monitoring**: Watch logs for frequent flapping between servers
+5. **Testing**: Test manual failover/restore before relying on automation
+6. **Backup monitoring**: Monitor the backup server health separately
+7. **State backup**: Include `failover_state.json` in system backups
 
 ## Troubleshooting
 
@@ -247,12 +338,14 @@ Or run a single check to see immediate output:
 
 ## Security Considerations
 
+- **Azure Key Vault**: Use for production secrets instead of environment variables
 - Store API tokens securely (avoid committing to version control)
 - Use minimal scope API tokens (`Zone:DNS:Edit` only)
 - Run service as non-root user
 - Restrict file permissions on config files (600)
 - Monitor API usage for anomalies
 - Rotate API tokens regularly
+- Enable Key Vault access logging and monitoring
 
 ## License
 

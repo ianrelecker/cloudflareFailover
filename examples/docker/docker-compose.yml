@@ -8,15 +8,19 @@ services:
     container_name: cloudflare-intelligent-failover
     restart: unless-stopped
     environment:
-      - CF_API_TOKEN=${CF_API_TOKEN}
-      - CF_ZONE_ID=${CF_ZONE_ID}
-      - DOMAIN=${DOMAIN}
-      - PRIMARY_IP=${PRIMARY_IP}
-      - BACKUP_IP=${BACKUP_IP}
+      # Azure Key Vault (recommended)
+      - AZURE_KEY_VAULT_URL=${AZURE_KEY_VAULT_URL:-}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      # Fallback environment variables for CF credentials only
+      - CF_API_TOKEN=${CF_API_TOKEN:-}
+      - CF_ZONE_ID=${CF_ZONE_ID:-}
+      # Optional settings
       - TTL=120
       - LOG_FILE=/var/log/intelligent_failover.log
+      # Note: DOMAIN, PRIMARY_IP, and BACKUP_IP are hardcoded in the script
     volumes:
-      - ./config.json:/app/config.json:ro
       - ./data:/app/data
       - ./logs:/var/log
     command: ["python", "intelligent_failover.py", "monitor"]
