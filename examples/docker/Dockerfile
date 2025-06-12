@@ -21,6 +21,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY intelligent_failover.py .
 COPY cloudflare_failover.py .
 COPY cloudflare_failover.sh .
+COPY startup.py .
+COPY app.py .
 RUN chmod +x *.py *.sh
 
 # Create data and log directories

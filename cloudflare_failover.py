@@ -24,14 +24,14 @@ class CloudflareFailover:
             "cf_zone_id": os.getenv("CF_ZONE_ID", "your_cloudflare_zone_id_here"),
             
             # Domain configuration - hardcoded for simplicity
-            "domain": "example.com",  # Replace with your actual domain
-            "primary_ip": "20.125.26.115",  # Azure VM primary IP from bicep
-            "backup_ip": "4.155.81.101",   # Azure VM backup IP from bicep
+            "domain": "signedby.tech",  # Replace with your actual domain
+            "primary_ip": "172.171.99.178",  # Azure VM primary IP from bicep
+            "backup_ip": "172.171.100.13",   # Azure VM backup IP from bicep
             
             # Other settings
             "record_type": os.getenv("RECORD_TYPE", "A"),
             "ttl": int(os.getenv("TTL", "120")),
-            "log_file": os.getenv("LOG_FILE", "/var/log/cloudflare_failover.log")
+            "log_file": os.getenv("LOG_FILE", "/tmp/cloudflare_failover.log")
         }
         
         # Optional config file override (backward compatibility)
@@ -53,16 +53,29 @@ class CloudflareFailover:
         return config
     
     def setup_logging(self):
-        """Setup logging configuration"""
+        """Setup logging configuration for Azure App Service"""
+        log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+        log_file = self.config.get("log_file", "/tmp/cloudflare_failover.log")
+        
+        handlers = [logging.StreamHandler(sys.stdout)]
+        
+        # Only add file handler if not in Azure App Service (stdout is preferred)
+        if not os.getenv('WEBSITE_SITE_NAME'):  # Azure App Service environment variable
+            try:
+                handlers.append(logging.FileHandler(log_file))
+            except PermissionError:
+                # Fallback if file logging fails
+                pass
+        
         logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.StreamHandler(sys.stdout),
-                logging.FileHandler(self.config.get("log_file", "/tmp/cloudflare_failover.log"))
-            ]
+            level=getattr(logging, log_level, logging.INFO),
+            format='%(asctime)s - %(levelname)s - %(message)s [%(filename)s:%(lineno)d]',
+            handlers=handlers
         )
         self.logger = logging.getLogger(__name__)
+        
+        if os.getenv('WEBSITE_SITE_NAME'):
+            self.logger.info(f"Running in Azure App Service: {os.getenv('WEBSITE_SITE_NAME')}")
     
     def get_record_id(self, name):
         """Get DNS record ID by name"""

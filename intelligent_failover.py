@@ -7,7 +7,7 @@ import os
 import time
 import subprocess
 import signal
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional, List
 from dataclasses import dataclass, asdict
 
@@ -31,8 +31,15 @@ class MonitorState:
     health_history: List[HealthCheck]
 
 class IntelligentCloudflareFailover:
-    def __init__(self, state_file="failover_state.json"):
-        self.state_file = state_file
+    def __init__(self, state_file=None):
+        # Azure App Service friendly state file location
+        if state_file is None:
+            if os.getenv('WEBSITE_SITE_NAME'):  # Running in Azure App Service
+                self.state_file = "/tmp/failover_state.json"
+            else:
+                self.state_file = "failover_state.json"
+        else:
+            self.state_file = state_file
         self.config = self.load_config()
         self.state = self.load_state()
         self.setup_logging()
@@ -53,16 +60,29 @@ class IntelligentCloudflareFailover:
         }
     
     def setup_logging(self):
-        log_file = self.config.get('log_file', '/var/log/intelligent_failover.log')
+        # Azure App Service friendly logging
+        log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+        log_file = self.config.get('log_file', '/tmp/intelligent_failover.log')
+        
+        handlers = [logging.StreamHandler(sys.stdout)]
+        
+        # Only add file handler if not in Azure App Service (stdout is preferred)
+        if not os.getenv('WEBSITE_SITE_NAME'):  # Azure App Service environment variable
+            try:
+                handlers.append(logging.FileHandler(log_file))
+            except PermissionError:
+                # Fallback if file logging fails
+                pass
+        
         logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.StreamHandler(sys.stdout),
-                logging.FileHandler(log_file)
-            ]
+            level=getattr(logging, log_level, logging.INFO),
+            format='%(asctime)s - %(levelname)s - %(message)s [%(filename)s:%(lineno)d]',
+            handlers=handlers
         )
         self.logger = logging.getLogger(__name__)
+        
+        if os.getenv('WEBSITE_SITE_NAME'):
+            self.logger.info(f"Running in Azure App Service: {os.getenv('WEBSITE_SITE_NAME')}")
     
     
     def load_config(self) -> dict:
@@ -73,14 +93,14 @@ class IntelligentCloudflareFailover:
             "cf_zone_id": os.getenv("CF_ZONE_ID", "your_cloudflare_zone_id_here"),
             
             # Domain configuration - hardcoded for simplicity
-            "domain": "example.com",  # Replace with your actual domain
-            "primary_ip": "20.125.26.115",  # Azure VM primary IP from bicep
-            "backup_ip": "4.155.81.101",   # Azure VM backup IP from bicep
+            "domain": "signedby.tech",  # Replace with your actual domain
+            "primary_ip": "172.171.99.178",  # Azure VM primary IP from bicep
+            "backup_ip": "172.171.100.13",   # Azure VM backup IP from bicep
             
             # Other settings
             "record_type": os.getenv("RECORD_TYPE", "A"),
             "ttl": int(os.getenv("TTL", "120")),
-            "log_file": os.getenv("LOG_FILE", "/var/log/intelligent_failover.log")
+            "log_file": os.getenv("LOG_FILE", "/tmp/intelligent_failover.log")
         }
         
         # Validate required fields
