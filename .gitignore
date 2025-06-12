@@ -6,6 +6,7 @@ config.env
 # Log files
 *.log
 logs/
+LogFiles/
 
 # Python
 __pycache__/
@@ -47,3 +48,8 @@ Thumbs.db
 
 # Docker
 .dockerignore
+
+# Azure App Service files
+app-logs.zip
+deployments/
+failover_state.json
