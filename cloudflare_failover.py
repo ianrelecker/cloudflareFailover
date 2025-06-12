@@ -17,27 +17,37 @@ class CloudflareFailover:
         }
         
     def load_config(self, config_file):
-        """Load configuration from file or environment variables"""
+        """Load configuration from environment variables or hardcoded values"""
         config = {
-            "cf_api_token": os.getenv("CF_API_TOKEN"),
-            "cf_zone_id": os.getenv("CF_ZONE_ID"),
-            "domain": os.getenv("DOMAIN"),
-            "primary_ip": os.getenv("PRIMARY_IP"),
-            "backup_ip": os.getenv("BACKUP_IP"),
+            # Authentication - use environment variables (ideal for Azure App Service)
+            "cf_api_token": os.getenv("CF_API_TOKEN", "your_cloudflare_api_token_here"),
+            "cf_zone_id": os.getenv("CF_ZONE_ID", "your_cloudflare_zone_id_here"),
+            
+            # Domain configuration - hardcoded for simplicity
+            "domain": "example.com",  # Replace with your actual domain
+            "primary_ip": "20.125.26.115",  # Azure VM primary IP from bicep
+            "backup_ip": "4.155.81.101",   # Azure VM backup IP from bicep
+            
+            # Other settings
             "record_type": os.getenv("RECORD_TYPE", "A"),
             "ttl": int(os.getenv("TTL", "120")),
             "log_file": os.getenv("LOG_FILE", "/var/log/cloudflare_failover.log")
         }
         
+        # Optional config file override (backward compatibility)
         if os.path.exists(config_file):
             with open(config_file, 'r') as f:
                 file_config = json.load(f)
                 config.update({k: v for k, v in file_config.items() if v is not None})
         
         required_fields = ["cf_api_token", "cf_zone_id", "domain", "primary_ip", "backup_ip"]
-        missing_fields = [field for field in required_fields if not config.get(field)]
+        missing_fields = [field for field in required_fields if not config.get(field) or config.get(field).startswith("your_")]
         
         if missing_fields:
+            print("Please configure the following:")
+            print("1. Set CF_API_TOKEN environment variable with your Cloudflare API token")
+            print("2. Set CF_ZONE_ID environment variable with your Cloudflare Zone ID")
+            print("3. Update the domain name in the script (line 26)")
             raise ValueError(f"Missing required configuration: {', '.join(missing_fields)}")
             
         return config

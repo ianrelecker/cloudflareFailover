@@ -8,16 +8,10 @@ import time
 import subprocess
 import signal
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from dataclasses import dataclass, asdict
 
-# Azure Key Vault imports
-try:
-    from azure.keyvault.secrets import SecretClient
-    from azure.identity import DefaultAzureCredential, ClientSecretCredential
-    AZURE_AVAILABLE = True
-except ImportError:
-    AZURE_AVAILABLE = False
+# Removed Azure Key Vault imports for simplified authentication
 
 @dataclass
 class HealthCheck:
@@ -42,8 +36,6 @@ class IntelligentCloudflareFailover:
         self.config = self.load_config()
         self.state = self.load_state()
         self.setup_logging()
-        self.key_vault_client = None
-        self._init_azure_key_vault()
         
         # Health check rules per your specs
         self.check_interval = 30  # seconds
@@ -72,126 +64,38 @@ class IntelligentCloudflareFailover:
         )
         self.logger = logging.getLogger(__name__)
     
-    def _init_azure_key_vault(self):
-        """Initialize Azure Key Vault client if configured"""
-        vault_url = self.config.get('azure_key_vault_url') or os.getenv('AZURE_KEY_VAULT_URL')
-        
-        if not vault_url or not AZURE_AVAILABLE:
-            if vault_url and not AZURE_AVAILABLE:
-                self.logger.warning("Azure Key Vault URL provided but azure-keyvault-secrets not installed")
-            return
-        
-        try:
-            # Try different authentication methods
-            tenant_id = self.config.get('azure_tenant_id') or os.getenv('AZURE_TENANT_ID')
-            client_id = self.config.get('azure_client_id') or os.getenv('AZURE_CLIENT_ID')
-            client_secret = self.config.get('azure_client_secret') or os.getenv('AZURE_CLIENT_SECRET')
-            
-            if tenant_id and client_id and client_secret:
-                # Service principal authentication
-                credential = ClientSecretCredential(
-                    tenant_id=tenant_id,
-                    client_id=client_id,
-                    client_secret=client_secret
-                )
-                self.logger.info("Using Azure service principal authentication")
-            else:
-                # Default credential chain (managed identity, Azure CLI, etc.)
-                credential = DefaultAzureCredential()
-                self.logger.info("Using Azure default credential chain")
-            
-            self.key_vault_client = SecretClient(vault_url=vault_url, credential=credential)
-            self.logger.info(f"Azure Key Vault client initialized for {vault_url}")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to initialize Azure Key Vault: {e}")
-            self.key_vault_client = None
-    
-    def _get_secret_from_vault(self, secret_name: str) -> Optional[str]:
-        """Retrieve secret from Azure Key Vault"""
-        if not self.key_vault_client:
-            return None
-        
-        try:
-            secret = self.key_vault_client.get_secret(secret_name)
-            return secret.value
-        except Exception as e:
-            self.logger.error(f"Failed to retrieve secret '{secret_name}' from Key Vault: {e}")
-            return None
     
     def load_config(self) -> dict:
-        """Load configuration from file or environment variables"""
-        # Hardcoded values
+        """Load configuration from environment variables or hardcoded values"""
         config = {
-            "cf_api_token": os.getenv("CF_API_TOKEN"),
-            "cf_zone_id": os.getenv("CF_ZONE_ID"),
+            # Authentication - use environment variables (ideal for Azure App Service)
+            "cf_api_token": os.getenv("CF_API_TOKEN", "your_cloudflare_api_token_here"),
+            "cf_zone_id": os.getenv("CF_ZONE_ID", "your_cloudflare_zone_id_here"),
+            
+            # Domain configuration - hardcoded for simplicity
             "domain": "example.com",  # Replace with your actual domain
-            "primary_ip": "1.2.3.4",  # Replace with your primary server IP
-            "backup_ip": "5.6.7.8",   # Replace with your backup server IP
+            "primary_ip": "20.125.26.115",  # Azure VM primary IP from bicep
+            "backup_ip": "4.155.81.101",   # Azure VM backup IP from bicep
+            
+            # Other settings
             "record_type": os.getenv("RECORD_TYPE", "A"),
             "ttl": int(os.getenv("TTL", "120")),
-            "log_file": os.getenv("LOG_FILE", "/var/log/intelligent_failover.log"),
-            # Azure Key Vault configuration
-            "azure_key_vault_url": os.getenv("AZURE_KEY_VAULT_URL"),
-            "azure_tenant_id": os.getenv("AZURE_TENANT_ID"),
-            "azure_client_id": os.getenv("AZURE_CLIENT_ID"),
-            "azure_client_secret": os.getenv("AZURE_CLIENT_SECRET"),
-            # Key Vault secret names (with defaults)
-            "kv_cf_api_token_name": os.getenv("KV_CF_API_TOKEN_NAME", "cloudflare-api-token"),
-            "kv_cf_zone_id_name": os.getenv("KV_CF_ZONE_ID_NAME", "cloudflare-zone-id")
+            "log_file": os.getenv("LOG_FILE", "/var/log/intelligent_failover.log")
         }
-        
-        # Initialize Key Vault client with current config
-        self._init_azure_key_vault_from_config(config)
-        
-        # Override sensitive values from Azure Key Vault if available
-        if self.key_vault_client:
-            vault_token = self._get_secret_from_vault(config.get('kv_cf_api_token_name', 'cloudflare-api-token'))
-            if vault_token:
-                config['cf_api_token'] = vault_token
-                self.logger.info("Retrieved Cloudflare API token from Azure Key Vault")
-            
-            vault_zone_id = self._get_secret_from_vault(config.get('kv_cf_zone_id_name', 'cloudflare-zone-id'))
-            if vault_zone_id:
-                config['cf_zone_id'] = vault_zone_id
-                self.logger.info("Retrieved Cloudflare Zone ID from Azure Key Vault")
         
         # Validate required fields
         required = ["cf_api_token", "cf_zone_id"]
-        missing = [field for field in required if not config.get(field)]
+        missing = [field for field in required if not config.get(field) or config.get(field).startswith("your_")]
         
         if missing:
+            self.logger.error("Please configure the following:")
+            self.logger.error("1. Set CF_API_TOKEN environment variable with your Cloudflare API token")
+            self.logger.error("2. Set CF_ZONE_ID environment variable with your Cloudflare Zone ID")
+            self.logger.error("3. Update the domain name in the script (line 129)")
             raise ValueError(f"Missing required configuration: {', '.join(missing)}")
             
         return config
     
-    def _init_azure_key_vault_from_config(self, config: Dict[str, Any]):
-        """Initialize Azure Key Vault client from config (used during config loading)"""
-        vault_url = config.get('azure_key_vault_url')
-        
-        if not vault_url or not AZURE_AVAILABLE:
-            return
-        
-        try:
-            tenant_id = config.get('azure_tenant_id')
-            client_id = config.get('azure_client_id')
-            client_secret = config.get('azure_client_secret')
-            
-            if tenant_id and client_id and client_secret:
-                credential = ClientSecretCredential(
-                    tenant_id=tenant_id,
-                    client_id=client_id,
-                    client_secret=client_secret
-                )
-            else:
-                credential = DefaultAzureCredential()
-            
-            self.key_vault_client = SecretClient(vault_url=vault_url, credential=credential)
-            
-        except Exception as e:
-            self.logger = logging.getLogger(__name__)  # Ensure logger exists
-            self.logger.error(f"Failed to initialize Azure Key Vault during config load: {e}")
-            self.key_vault_client = None
     
     def load_state(self) -> MonitorState:
         """Load monitoring state from file"""
@@ -481,7 +385,7 @@ class IntelligentCloudflareFailover:
         self.running = True
         
         # Set up signal handlers for graceful shutdown
-        def signal_handler(signum, frame):
+        def signal_handler(_signum, _frame):
             self.logger.info("Received shutdown signal")
             self.running = False
             self.save_state()
@@ -589,8 +493,8 @@ def main():
         print("  check     - Single health check")
         print("")
         print("Configuration:")
-        print("  Set AZURE_KEY_VAULT_URL for Azure Key Vault integration")
-        print("  Or use environment variables: CF_API_TOKEN, CF_ZONE_ID, etc.")
+        print("  Set environment variables: CF_API_TOKEN, CF_ZONE_ID")
+        print("  Or edit domain/IP values directly in the script")
         sys.exit(1)
     
     command = sys.argv[1].lower()
