@@ -1,10 +1,10 @@
 {
-  "current_ip": "4.155.81.101",
-  "is_failed_over": true,
+  "current_ip": "172.171.99.178",
+  "is_failed_over": false,
   "consecutive_failures": 0,
-  "consecutive_successes": 1,
+  "consecutive_successes": 0,
   "last_failover": "2025-06-06T12:54:50.277622",
-  "last_restore": "2025-06-06T12:30:19.139063",
+  "last_restore": "2025-06-12T23:04:00.000000",
   "health_history": [
     {
       "timestamp": "2025-06-06T12:14:40.386632",

@@ -57,6 +57,9 @@ class IntelligentCloudflareFailover:
             "Authorization": f"Bearer {self.config['cf_api_token']}",
             "Content-Type": "application/json"
         }
+        
+        # Intelligent startup - check and prefer primary if healthy
+        self.intelligent_startup()
     
     def setup_logging(self):
         # Azure App Service friendly logging
@@ -83,6 +86,69 @@ class IntelligentCloudflareFailover:
         if os.getenv('WEBSITE_SITE_NAME'):
             self.logger.info(f"Running in Azure App Service: {os.getenv('WEBSITE_SITE_NAME')}")
     
+    def intelligent_startup(self):
+        """Intelligent startup: check current state and prefer primary when healthy"""
+        try:
+            # Get current DNS record
+            record_id, current_dns_ip = self.get_dns_record()
+            if not record_id:
+                self.logger.warning("Could not get DNS record during startup")
+                return
+            
+            self.logger.info(f"Startup: DNS currently points to {current_dns_ip}")
+            
+            # Test both servers
+            primary_health = self.ping_with_latency(self.config['primary_ip'])
+            backup_health = self.ping_with_latency(self.config['backup_ip'])
+            
+            self.logger.info(f"Primary server health: Success={primary_health.success}, Latency={primary_health.latency_ms}ms")
+            self.logger.info(f"Backup server health: Success={backup_health.success}, Latency={backup_health.latency_ms}ms")
+            
+            # Determine best server
+            primary_healthy = primary_health.success and (not primary_health.latency_ms or primary_health.latency_ms <= self.latency_threshold_ms)
+            backup_healthy = backup_health.success and (not backup_health.latency_ms or backup_health.latency_ms <= self.latency_threshold_ms)
+            
+            target_ip = None
+            reason = ""
+            
+            if primary_healthy:
+                # Primary is healthy - prefer it
+                target_ip = self.config['primary_ip']
+                reason = "Primary server is healthy (preferred)"
+            elif backup_healthy:
+                # Primary unhealthy but backup is healthy
+                target_ip = self.config['backup_ip'] 
+                reason = "Primary unhealthy, using backup"
+            else:
+                # Both unhealthy - leave current setting
+                self.logger.warning("Both servers appear unhealthy during startup - keeping current DNS")
+                return
+            
+            # Update DNS if needed
+            if current_dns_ip != target_ip:
+                self.logger.info(f"Startup: Switching DNS from {current_dns_ip} to {target_ip} - {reason}")
+                if self.update_dns_record(record_id, target_ip):
+                    # Update state
+                    self.state.current_ip = target_ip
+                    self.state.is_failed_over = (target_ip == self.config['backup_ip'])
+                    self.state.consecutive_failures = 0
+                    self.state.consecutive_successes = 0
+                    if target_ip == self.config['primary_ip']:
+                        self.state.last_restore = datetime.now()
+                    else:
+                        self.state.last_failover = datetime.now()
+                    self.save_state()
+                    self.logger.info(f"Startup: Successfully updated DNS to {target_ip}")
+                else:
+                    self.logger.error(f"Startup: Failed to update DNS to {target_ip}")
+            else:
+                self.logger.info(f"Startup: DNS already correctly set to {target_ip} - {reason}")
+                # Update state to match reality
+                self.state.current_ip = current_dns_ip
+                self.state.is_failed_over = (current_dns_ip == self.config['backup_ip'])
+                
+        except Exception as e:
+            self.logger.error(f"Error during intelligent startup: {e}")
     
     def load_config(self) -> dict:
         """Load configuration from environment variables or hardcoded values"""
