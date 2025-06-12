@@ -96,5 +96,95 @@ def main():
         traceback.print_exc()
         sys.exit(1)
 
+def create_simple_app():
+    """Create a simple Flask-like app for Azure App Service"""
+    import threading
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    import json
+    from datetime import datetime
+    
+    # Global variables for monitoring status
+    monitor_instance = None
+    monitor_status = {"running": False, "error": None, "started_at": None}
+    
+    class SimpleHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == '/':
+                self.send_response(200)
+                self.send_header('Content-type', 'text/plain')
+                self.end_headers()
+                status = "RUNNING" if monitor_status['running'] else "STOPPED"
+                error = f" (ERROR: {monitor_status['error']})" if monitor_status['error'] else ""
+                self.wfile.write(f"Cloudflare DNS Failover Monitor: {status}{error}\n".encode())
+            elif self.path == '/health':
+                status_code = 200 if monitor_status['running'] else 503
+                self.send_response(status_code)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                health = {
+                    "status": "healthy" if monitor_status['running'] else "unhealthy",
+                    "timestamp": datetime.now().isoformat(),
+                    "monitor_running": monitor_status['running'],
+                    "error": monitor_status.get('error')
+                }
+                self.wfile.write(json.dumps(health).encode())
+            else:
+                self.send_response(404)
+                self.end_headers()
+        
+        def log_message(self, format, *args):
+            pass  # Suppress HTTP logs
+    
+    def start_monitor_background():
+        global monitor_instance, monitor_status
+        try:
+            print("🔧 Starting DNS monitor in background...")
+            monitor_status['started_at'] = datetime.now()
+            
+            from intelligent_failover import IntelligentCloudflareFailover
+            monitor_instance = IntelligentCloudflareFailover()
+            monitor_status['running'] = True
+            monitor_status['error'] = None
+            print("✅ DNS Monitor started successfully")
+            
+            # Start monitoring loop
+            monitor_instance.monitor_loop()
+            
+        except Exception as e:
+            monitor_status['running'] = False
+            monitor_status['error'] = str(e)
+            print(f"❌ DNS Monitor failed: {e}")
+    
+    # Start monitor in background thread
+    monitor_thread = threading.Thread(target=start_monitor_background, daemon=True)
+    monitor_thread.start()
+    
+    # Start simple HTTP server
+    port = int(os.getenv('PORT', 8000))
+    server = HTTPServer(('0.0.0.0', port), SimpleHandler)
+    print(f"🌐 Health check server started on port {port}")
+    server.serve_forever()
+
 if __name__ == "__main__":
-    main()
+    if os.getenv('WEBSITE_SITE_NAME'):
+        # Running on Azure App Service - use web server approach
+        print("🔍 Azure App Service detected - starting with web interface...")
+        
+        # Validate config first
+        required_vars = ['CF_API_TOKEN', 'CF_ZONE_ID']
+        missing_vars = []
+        for var in required_vars:
+            value = os.getenv(var)
+            if not value or value.startswith('your_'):
+                missing_vars.append(var)
+        
+        if missing_vars:
+            print("❌ Missing configuration. Please set these environment variables:")
+            for var in missing_vars:
+                print(f"  • {var}")
+            sys.exit(1)
+        
+        create_simple_app()
+    else:
+        # Running locally - use original approach
+        main()
