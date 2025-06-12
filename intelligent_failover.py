@@ -639,15 +639,20 @@ class IntelligentCloudflareFailover:
         self.running = True
         cycle_count = 0
         
-        # Set up signal handlers for graceful shutdown
+        # Set up signal handlers for graceful shutdown (only if running in main thread)
         def signal_handler(_signum, _frame):
             self.logger.info("Received shutdown signal")
             self.running = False
             self.save_state()
             sys.exit(0)
         
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
+        try:
+            signal.signal(signal.SIGINT, signal_handler)
+            signal.signal(signal.SIGTERM, signal_handler)
+            self.logger.debug("Signal handlers registered successfully")
+        except ValueError as e:
+            # Signal handlers can only be set from main thread
+            self.logger.debug(f"Cannot set signal handlers (likely running in background thread): {e}")
         
         while self.running:
             cycle_count += 1
