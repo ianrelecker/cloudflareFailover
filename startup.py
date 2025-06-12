@@ -139,7 +139,7 @@ def create_simple_app():
         global monitor_instance, monitor_status
         try:
             print("🔧 Starting DNS monitor in background...")
-            monitor_status['started_at'] = datetime.now()
+            monitor_status = {"running": False, "error": None, "started_at": datetime.now()}
             
             from intelligent_failover import IntelligentCloudflareFailover
             monitor_instance = IntelligentCloudflareFailover()
@@ -151,8 +151,11 @@ def create_simple_app():
             monitor_instance.monitor_loop()
             
         except Exception as e:
-            monitor_status['running'] = False
-            monitor_status['error'] = str(e)
+            if 'monitor_status' not in locals():
+                monitor_status = {"running": False, "error": str(e), "started_at": datetime.now()}
+            else:
+                monitor_status['running'] = False
+                monitor_status['error'] = str(e)
             print(f"❌ DNS Monitor failed: {e}")
     
     # Start monitor in background thread
