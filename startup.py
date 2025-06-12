@@ -151,12 +151,16 @@ def create_simple_app():
             monitor_instance.monitor_loop()
             
         except Exception as e:
+            error_details = f"{type(e).__name__}: {str(e)}"
             if 'monitor_status' not in locals():
-                monitor_status = {"running": False, "error": str(e), "started_at": datetime.now()}
+                monitor_status = {"running": False, "error": error_details, "started_at": datetime.now()}
             else:
                 monitor_status['running'] = False
-                monitor_status['error'] = str(e)
-            print(f"❌ DNS Monitor failed: {e}")
+                monitor_status['error'] = error_details
+            print(f"❌ DNS Monitor failed: {error_details}")
+            import traceback
+            print("Full error traceback:")
+            traceback.print_exc()
     
     # Start monitor in background thread
     monitor_thread = threading.Thread(target=start_monitor_background, daemon=True)
