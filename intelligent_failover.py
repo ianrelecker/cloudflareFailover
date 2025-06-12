@@ -5,7 +5,6 @@ import logging
 import json
 import os
 import time
-import subprocess
 import signal
 from datetime import datetime
 from typing import Optional, List
@@ -108,10 +107,10 @@ class IntelligentCloudflareFailover:
         missing = [field for field in required if not config.get(field) or config.get(field).startswith("your_")]
         
         if missing:
-            self.logger.error("Please configure the following:")
-            self.logger.error("1. Set CF_API_TOKEN environment variable with your Cloudflare API token")
-            self.logger.error("2. Set CF_ZONE_ID environment variable with your Cloudflare Zone ID")
-            self.logger.error("3. Update the domain name in the script (line 129)")
+            print("Please configure the following:")
+            print("1. Set CF_API_TOKEN environment variable with your Cloudflare API token")
+            print("2. Set CF_ZONE_ID environment variable with your Cloudflare Zone ID")
+            print("3. Update the domain name in the script (line 96)")
             raise ValueError(f"Missing required configuration: {', '.join(missing)}")
             
         return config
@@ -189,50 +188,59 @@ class IntelligentCloudflareFailover:
             self.logger.error(f"Failed to save state: {e}")
     
     def ping_with_latency(self, ip: str) -> HealthCheck:
-        """Ping an IP and measure latency"""
+        """Health check using HTTP request (Azure App Service compatible)"""
         try:
             start_time = time.time()
-            result = subprocess.run(
-                ["ping", "-c", "1", "-W", "5", ip],
-                capture_output=True,
-                timeout=10,
-                text=True
-            )
-            end_time = time.time()
             
-            if result.returncode == 0:
-                # Extract latency from ping output
-                output = result.stdout
-                if "time=" in output:
-                    try:
-                        latency_str = output.split("time=")[1].split()[0]
-                        latency_ms = float(latency_str)
-                    except:
-                        latency_ms = (end_time - start_time) * 1000
-                else:
+            # Try HTTP first, then HTTPS
+            for protocol in ['http', 'https']:
+                try:
+                    url = f"{protocol}://{ip}"
+                    response = requests.get(url, timeout=5, allow_redirects=False)
+                    end_time = time.time()
                     latency_ms = (end_time - start_time) * 1000
-                
-                return HealthCheck(
-                    timestamp=datetime.now(),
-                    success=True,
-                    latency_ms=latency_ms,
-                    error=None
-                )
-            else:
-                return HealthCheck(
-                    timestamp=datetime.now(),
-                    success=False,
-                    latency_ms=None,
-                    error=f"Ping failed: {result.stderr.strip()}"
-                )
-        
-        except subprocess.TimeoutExpired:
+                    
+                    # Consider 2xx, 3xx, 4xx as "server responding" (healthy)
+                    # Only 5xx or connection errors are unhealthy
+                    if response.status_code < 500:
+                        return HealthCheck(
+                            timestamp=datetime.now(),
+                            success=True,
+                            latency_ms=latency_ms,
+                            error=None
+                        )
+                    else:
+                        return HealthCheck(
+                            timestamp=datetime.now(),
+                            success=False,
+                            latency_ms=latency_ms,
+                            error=f"HTTP {response.status_code}"
+                        )
+                        
+                except requests.exceptions.ConnectionError:
+                    # Try next protocol
+                    continue
+                except requests.exceptions.Timeout:
+                    end_time = time.time()
+                    return HealthCheck(
+                        timestamp=datetime.now(),
+                        success=False,
+                        latency_ms=(end_time - start_time) * 1000,
+                        error="HTTP timeout"
+                    )
+                except Exception as e:
+                    # Try next protocol
+                    continue
+            
+            # If both HTTP and HTTPS failed
+            end_time = time.time()
             return HealthCheck(
                 timestamp=datetime.now(),
                 success=False,
-                latency_ms=None,
-                error="Ping timeout"
+                latency_ms=(end_time - start_time) * 1000,
+                error="HTTP connection failed"
             )
+            
         except Exception as e:
             return HealthCheck(
                 timestamp=datetime.now(),
@@ -348,8 +356,9 @@ class IntelligentCloudflareFailover:
         health_check = self.ping_with_latency(self.config['primary_ip'])
         
         # Log current status
+        latency_str = f"{health_check.latency_ms:.1f}ms" if health_check.latency_ms else "None"
         status_msg = (f"Health check - Success: {health_check.success}, "
-                     f"Latency: {health_check.latency_ms}ms, "
+                     f"Latency: {latency_str}, "
                      f"Consecutive failures: {self.state.consecutive_failures}, "
                      f"Consecutive successes: {self.state.consecutive_successes}")
         

@@ -161,9 +161,15 @@ def create_simple_app():
     
     # Start simple HTTP server
     port = int(os.getenv('PORT', 8000))
-    server = HTTPServer(('0.0.0.0', port), SimpleHandler)
-    print(f"🌐 Health check server started on port {port}")
-    server.serve_forever()
+    print(f"🌐 Starting health check server on 0.0.0.0:{port}")
+    try:
+        server = HTTPServer(('0.0.0.0', port), SimpleHandler)
+        print(f"🌐 Health check server started successfully on port {port}")
+        server.serve_forever()
+    except Exception as e:
+        print(f"❌ Failed to start server on port {port}: {e}")
+        # Fallback - just run the monitor without web server
+        main()
 
 if __name__ == "__main__":
     if os.getenv('WEBSITE_SITE_NAME'):
