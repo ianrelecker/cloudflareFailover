@@ -124,14 +124,6 @@ Update `intelligent_failover.py` lines 129-131:
 - Auto-scaling and high availability
 - See `azure-app-service.md` for complete guide
 
-### Docker Container
-```bash
-cd examples/docker
-export CF_API_TOKEN="your_token"
-export CF_ZONE_ID="your_zone_id"
-docker-compose up -d
-```
-
 ### Local Development
 ```bash
 pip install -r requirements.txt
