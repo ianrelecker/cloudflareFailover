@@ -1,75 +1,57 @@
-# Cloudflare DNS Intelligent Failover
+# Cloudflare DNS Failover
 
-Simple CLI tool for automated DNS failover using Cloudflare's API with intelligent health monitoring.
+Automated DNS failover system for Azure App Service that monitors server health and switches Cloudflare DNS records between primary and backup servers.
 
 ## Features
 
-- **Smart failover rules**: Ping every 30s, failover after 2 consecutive failures or >100ms latency
-- **Stability requirements**: Primary must be healthy for 10 minutes before restoration  
-- **Single account focus**: Simple configuration for one Cloudflare account
-- **State persistence**: Remembers failover history and consecutive health checks
-- **CLI-based**: Lightweight monitoring without web interface complexity
+- **Smart monitoring**: Health checks every 30 seconds with intelligent failover logic
+- **Stable restoration**: 10-minute stability requirement before restoring to primary
+- **Azure optimized**: Designed for Azure App Service with environment variable configuration
+- **State persistence**: Maintains failover history and health check records
+- **Multiple interfaces**: CLI tool and optional web dashboard
 
-## Health Monitoring Rules
+## Health Monitoring
 
 ### Failover Triggers
-- **Latency**: >100ms for 2 consecutive pings (60 seconds total)
-- **Availability**: No response for 2 consecutive pings (60 seconds total)  
-- **Check interval**: Every 30 seconds
+- 2 consecutive failures (60 seconds)
+- Latency >100ms for 2 consecutive checks (60 seconds)
 
 ### Restoration Requirements
-- **Stability period**: Primary must be healthy for 10 minutes continuously
-- **Low latency**: <100ms consistently during stability period
-- **Success count**: ~20 consecutive successful health checks
+- Primary healthy for 10 minutes continuously
+- Latency <100ms throughout stability period
+- ~20 consecutive successful health checks
 
 ## Quick Start
 
-### 1. Get Cloudflare Credentials
+### Azure App Service Deployment (Recommended)
 
-1. Log into [Cloudflare Dashboard](https://dash.cloudflare.com)
-2. Go to "My Profile" → "API Tokens"  
-3. Create a token with `Zone:DNS:Edit` permissions for your domain
-4. Note your Zone ID from the domain overview page
+1. **Configure domain and IPs** in `intelligent_failover.py` (lines 129-131)
+2. **Create Azure App Service** with Python 3.11 runtime
+3. **Set environment variables** in App Service Configuration:
+   - `CF_API_TOKEN`: Your Cloudflare API token
+   - `CF_ZONE_ID`: Your Cloudflare Zone ID
+4. **Set startup command**: `python startup.py`
+5. **Deploy** using GitHub Actions or continuous deployment
 
-### 2. Configure
+📖 **Complete deployment guide**: See `azure-app-service.md`
 
-**Option A: Azure Key Vault (Recommended)**
-```bash
-# Store secrets in Azure Key Vault
-az keyvault secret set --vault-name "your-vault" --name "cloudflare-api-token" --value "your_token"
-az keyvault secret set --vault-name "your-vault" --name "cloudflare-zone-id" --value "your_zone_id"
-
-# Set Key Vault URL
-export AZURE_KEY_VAULT_URL="https://your-vault.vault.azure.net/"
-
-# Note: Domain and IPs are hardcoded in the script - edit intelligent_failover.py
-```
-
-**Option B: Environment Variables Only**
-```bash
-export CF_API_TOKEN="your_token"
-export CF_ZONE_ID="your_zone_id"
-
-# Note: Domain and IPs are hardcoded in the script - edit intelligent_failover.py
-```
-
-### 3. Install and Run
+### Local Development
 
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
-# Edit the script to set your domain and IPs
-# Update lines 127-129 in intelligent_failover.py:
-#   "domain": "your-actual-domain.com"
-#   "primary_ip": "your-primary-ip"
-#   "backup_ip": "your-backup-ip"
+# Set environment variables
+export CF_API_TOKEN="your_token"
+export CF_ZONE_ID="your_zone_id"
+
+# Configure domain and IPs in intelligent_failover.py
 
 # Test configuration
-./intelligent_failover.py status
+python intelligent_failover.py status
 
-# Start monitoring (runs forever)
-./intelligent_failover.py monitor
+# Start monitoring
+python intelligent_failover.py monitor
 ```
 
 ## Usage
@@ -111,156 +93,49 @@ Commands:
 
 | Parameter | Description | Source | Default |
 |-----------|-------------|--------|----------|
-| `cf_api_token` | Cloudflare API token | Azure KV or ENV | Required |
-| `cf_zone_id` | Cloudflare zone ID | Azure KV or ENV | Required |
-| `domain` | Domain to manage | **Hardcoded in script** | "example.com" |
-| `primary_ip` | Primary server IP | **Hardcoded in script** | "1.2.3.4" |
-| `backup_ip` | Backup server IP | **Hardcoded in script** | "5.6.7.8" |
-| `record_type` | DNS record type | ENV | "A" |
-| `ttl` | DNS TTL in seconds | ENV | 120 |
-| `log_file` | Log file path | ENV | "/var/log/intelligent_failover.log" |
+| `CF_API_TOKEN` | Cloudflare API token | Environment variable | Required |
+| `CF_ZONE_ID` | Cloudflare zone ID | Environment variable | Required |
+| `domain` | Domain to manage | Hardcoded in script | "yourdomain.com" |
+| `primary_ip` | Primary server IP | Hardcoded in script | "20.125.26.115" |
+| `backup_ip` | Backup server IP | Hardcoded in script | "4.155.81.101" |
+| `TTL` | DNS TTL in seconds | Environment variable | 120 |
+| `LOG_LEVEL` | Logging level | Environment variable | INFO |
 
-### Environment Variables
-
-For sensitive credentials only (domain and IPs are hardcoded):
-
+**Required Environment Variables:**
 ```bash
-export CF_API_TOKEN="your_token"
-export CF_ZONE_ID="your_zone_id"
-
-# Optional settings
-export RECORD_TYPE="A"
-export TTL="120"
-export LOG_FILE="/var/log/intelligent_failover.log"
+CF_API_TOKEN="your_cloudflare_api_token"
+CF_ZONE_ID="your_cloudflare_zone_id"
 ```
 
-### Azure Key Vault Integration
-
-For enhanced security, store sensitive credentials in Azure Key Vault:
-
-#### 1. Azure Key Vault Setup
-
-```bash
-# Create Key Vault (if needed)
-az keyvault create --name "your-keyvault-name" --resource-group "your-rg" --location "eastus"
-
-# Store secrets
-az keyvault secret set --vault-name "your-keyvault-name" --name "cloudflare-api-token" --value "your_actual_token"
-az keyvault secret set --vault-name "your-keyvault-name" --name "cloudflare-zone-id" --value "your_actual_zone_id"
+**Domain Configuration (Edit in Code):**
+Update `intelligent_failover.py` lines 129-131:
+```python
+"domain": "yourdomain.com",
+"primary_ip": "your-primary-ip",
+"backup_ip": "your-backup-ip",
 ```
-
-#### 2. Authentication Methods
-
-**Option A: Managed Identity (Recommended for Azure VMs)**
-```bash
-export AZURE_KEY_VAULT_URL="https://your-keyvault-name.vault.azure.net/"
-# No additional auth needed - uses system assigned identity
-```
-
-**Option B: Service Principal**
-```bash
-export AZURE_KEY_VAULT_URL="https://your-keyvault-name.vault.azure.net/"
-export AZURE_TENANT_ID="your-tenant-id"
-export AZURE_CLIENT_ID="your-client-id"
-export AZURE_CLIENT_SECRET="your-client-secret"
-```
-
-**Option C: Azure CLI (Development)**
-```bash
-az login
-export AZURE_KEY_VAULT_URL="https://your-keyvault-name.vault.azure.net/"
-# Uses Azure CLI credentials
-```
-
-#### 3. Custom Secret Names
-
-Override default Key Vault secret names:
-
-```bash
-export KV_CF_API_TOKEN_NAME="my-custom-token-name"
-export KV_CF_ZONE_ID_NAME="my-custom-zone-id-name"
-```
-
-#### 4. Complete Environment Configuration
-
-```bash
-# Azure Key Vault settings
-export AZURE_KEY_VAULT_URL="https://your-keyvault-name.vault.azure.net/"
-export AZURE_TENANT_ID="your-tenant-id"
-export AZURE_CLIENT_ID="your-client-id"
-export AZURE_CLIENT_SECRET="your-client-secret"
-
-# Custom Key Vault secret names (optional)
-export KV_CF_API_TOKEN_NAME="cloudflare-api-token"
-export KV_CF_ZONE_ID_NAME="cloudflare-zone-id"
-
-# Domain and IPs are hardcoded in the script
-# Edit intelligent_failover.py lines 127-129 to set your values
-```
-
-**Configuration Sources:**
-1. **Azure Key Vault secrets** (CF API token and zone ID only)
-2. **Environment variables** (CF API token and zone ID fallback)
-3. **Hardcoded in script** (domain, primary_ip, backup_ip)
 
 ## Deployment Options
 
-### Systemd Service
-
-Create `/etc/systemd/system/cloudflare-failover.service`:
-
-```ini
-[Unit]
-Description=Cloudflare DNS Intelligent Failover
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/intelligent_failover.py monitor
-WorkingDirectory=/opt/cloudflare-failover
-User=failover
-Group=failover
-Restart=always
-RestartSec=30
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
-```bash
-sudo systemctl enable cloudflare-failover
-sudo systemctl start cloudflare-failover
-```
+### Azure App Service (Recommended)
+- **Primary deployment method** for production
+- Continuous deployment from GitHub
+- Built-in monitoring and logging
+- Auto-scaling and high availability
+- See `azure-app-service.md` for complete guide
 
 ### Docker Container
-
 ```bash
-# Build and run with docker-compose
 cd examples/docker
-
-# Make sure to edit intelligent_failover.py with your domain and IPs first!
-
-# Option A: Using Azure Key Vault
-export AZURE_KEY_VAULT_URL="https://your-vault.vault.azure.net/"
-docker-compose up -d
-
-# Option B: Using environment variables only
 export CF_API_TOKEN="your_token"
 export CF_ZONE_ID="your_zone_id"
 docker-compose up -d
-
-# Check logs
-docker-compose logs -f
 ```
 
-### Cron Job (Simple Checks)
-
-For basic monitoring without the continuous monitor:
-
+### Local Development
 ```bash
-# Add to crontab - check every 2 minutes
-*/2 * * * * /usr/local/bin/intelligent_failover.py check
+pip install -r requirements.txt
+python startup.py
 ```
 
 ## State Management
@@ -289,22 +164,19 @@ The system logs all actions with structured messages:
 
 ### Integration with Monitoring Systems
 
-The CLI design makes it easy to integrate with existing monitoring:
-
-- **Nagios/Icinga**: Use `intelligent_failover.py status` in check scripts
-- **Prometheus**: Parse JSON status output for metrics
-- **Grafana**: Create dashboards from log files or status API
-- **PagerDuty**: Alert on failover events from logs
+- **Azure Monitor**: Built-in logging and metrics for App Service deployments
+- **Application Insights**: Performance monitoring and alerting
+- **External monitoring**: JSON status endpoint at `/status` for integrations
+- **Log analysis**: Structured logging for automated alert parsing
 
 ## Best Practices
 
-1. **Secret Management**: Use Azure Key Vault for production deployments
-2. **API Security**: Use scoped API tokens with minimal `Zone:DNS:Edit` permissions
-3. **Low TTL**: Keep TTL at 120 seconds for fast DNS propagation
-4. **Monitoring**: Watch logs for frequent flapping between servers
-5. **Testing**: Test manual failover/restore before relying on automation
-6. **Backup monitoring**: Monitor the backup server health separately
-7. **State backup**: Include `failover_state.json` in system backups
+1. **Use Azure App Service** for production deployments with built-in security
+2. **Minimal API permissions**: Cloudflare tokens with only `Zone:DNS:Edit` permissions
+3. **Fast DNS propagation**: Use 120-second TTL for quick failover
+4. **Monitor logs** for frequent failover events indicating issues
+5. **Test failover** manually before relying on automation
+6. **Monitor both servers** independently to verify health
 
 ## Troubleshooting
 
@@ -336,16 +208,13 @@ Or run a single check to see immediate output:
 ./intelligent_failover.py check
 ```
 
-## Security Considerations
+## Security
 
-- **Azure Key Vault**: Use for production secrets instead of environment variables
-- Store API tokens securely (avoid committing to version control)
-- Use minimal scope API tokens (`Zone:DNS:Edit` only)
-- Run service as non-root user
-- Restrict file permissions on config files (600)
-- Monitor API usage for anomalies
-- Rotate API tokens regularly
-- Enable Key Vault access logging and monitoring
+- **Azure App Service**: Environment variables encrypted at rest
+- **Minimal API permissions**: `Zone:DNS:Edit` only
+- **No secrets in code**: All sensitive data via environment variables
+- **HTTPS by default**: Azure App Service provides automatic SSL
+- **Regular token rotation**: Update Cloudflare API tokens periodically
 
 ## License
 

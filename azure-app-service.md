@@ -23,18 +23,9 @@ This guide covers deploying the Cloudflare DNS Failover system to Azure App Serv
 
 ## Step 3: Update Domain Configuration
 
-Before deploying, edit the domain and server IPs in the scripts:
-
-**intelligent_failover.py** (lines 129-131):
+Edit the domain and server IPs in `intelligent_failover.py` (lines 129-131):
 ```python
 "domain": "yourdomain.com",           # Your actual domain
-"primary_ip": "20.125.26.115",       # Your primary server IP
-"backup_ip": "4.155.81.101",         # Your backup server IP
-```
-
-**cloudflare_failover.py** (lines 27-29):
-```python
-"domain": "yourdomain.com",           # Your actual domain  
 "primary_ip": "20.125.26.115",       # Your primary server IP
 "backup_ip": "4.155.81.101",         # Your backup server IP
 ```
@@ -102,17 +93,9 @@ In Azure Portal, go to your App Service → **Configuration** → **Application 
 
 In Azure Portal, go to **Configuration** → **General Settings**:
 
-**Option A - Console Application (Recommended):**
 **Startup Command**: `python startup.py`
 
-**Option B - Web Interface (For debugging/monitoring):**
-**Startup Command**: `python app.py`
-
-The web interface provides:
-- Status dashboard at `/`
-- JSON status API at `/status`
-- Health check endpoint at `/health`
-- Configuration info at `/config`
+This runs the failover monitoring service continuously. For debugging, you can also use `python app.py` to run the web interface with status dashboard.
 
 ## Step 8: Deploy
 
@@ -135,13 +118,14 @@ The web interface provides:
 - **Azure CLI**: `az webapp log tail --name your-app-name --resource-group your-rg`
 
 ### Health Check
-The app automatically provides status via the `/status` endpoint.
+Monitor the service via Azure App Service logs and the optional web interface.
 
 ### Common Issues
 
-1. **Missing Environment Variables**: Check Application Settings
-2. **Domain Not Configured**: Update domain in Python scripts
-3. **Permissions**: Ensure Cloudflare API token has Zone:DNS:Edit permissions
+1. **Missing Environment Variables**: Verify CF_API_TOKEN and CF_ZONE_ID in Application Settings
+2. **Domain Not Configured**: Update domain configuration in intelligent_failover.py
+3. **API Permissions**: Ensure Cloudflare API token has Zone:DNS:Edit permissions
+4. **Startup Failures**: Check logs for Python dependency or configuration errors
 
 ## Security Considerations
 
