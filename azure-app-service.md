@@ -95,7 +95,7 @@ In Azure Portal, go to **Configuration** → **General Settings**:
 
 **Startup Command**: `python startup.py`
 
-This runs the failover monitoring service continuously. For debugging, you can also use `python app.py` to run the web interface with status dashboard.
+This runs the failover monitoring service continuously as a background process.
 
 ## Step 8: Deploy
 
@@ -118,7 +118,7 @@ This runs the failover monitoring service continuously. For debugging, you can a
 - **Azure CLI**: `az webapp log tail --name your-app-name --resource-group your-rg`
 
 ### Health Check
-Monitor the service via Azure App Service logs and the optional web interface.
+Monitor the service via Azure App Service logs.
 
 ### Common Issues
 
