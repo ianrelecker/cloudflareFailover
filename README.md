@@ -8,7 +8,7 @@ Automated DNS failover system for Azure App Service that monitors server health 
 - **Stable restoration**: 10-minute stability requirement before restoring to primary
 - **Azure optimized**: Designed for Azure App Service with environment variable configuration
 - **State persistence**: Maintains failover history and health check records
-- **Multiple interfaces**: CLI tool and optional web dashboard
+- **CLI-based**: Lightweight monitoring without web interface complexity
 
 ## Health Monitoring
 
@@ -158,7 +158,7 @@ The system logs all actions with structured messages:
 
 - **Azure Monitor**: Built-in logging and metrics for App Service deployments
 - **Application Insights**: Performance monitoring and alerting
-- **External monitoring**: JSON status endpoint at `/status` for integrations
+- **External monitoring**: Use CLI status command for integrations
 - **Log analysis**: Structured logging for automated alert parsing
 
 ## Best Practices
